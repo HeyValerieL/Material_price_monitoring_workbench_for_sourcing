@@ -14,18 +14,18 @@ $('price-source').innerHTML=row?'<a target="_blank" rel="noopener" href="'+esc(r
 $('coverage').textContent='所选 '+month+' · 历史记录 '+rows.length+' 个月 · 最新记录 '+(rows.at(-1)?.month||'无');
 chart(month);
 
-const delta=row?change(row,3):null,trend=delta===null?'暂无可比趋势':delta>0.5?'上行':delta< -0.5?'下行':'平稳';
-$('trend').textContent=trend;$('trend-note').textContent=delta===null?'所选月或三个月前数据缺失':'较三个月前 '+pct(delta)+' · 历史走势';
+const delta=row?change(row,1):null,trend=MaterialPriceTrend.classify(rows,month);
+$('trend').textContent=trend;$('trend-note').textContent=delta===null?'缺少同口径上月价格':'较上月 '+pct(delta)+'；前两个月连续上涨后下跌称为回调，其余下跌为下行';
 renderAnalysis(month,row);
 if(document.body.dataset.category==='aluminum')document.dispatchEvent(new CustomEvent('market-selection',{detail:{category:'aluminum',month}}));
-const cards=delta!==null&&delta>0.5?[
+const cards=delta!==null&&delta>0?[
 ['对确定订单分批单边锁价','对交付已确认、铝价传导较快的关键零部件，考虑与供应商协商固定材料价格或封顶条款，先覆盖近期交付批次，再视库存和报价变化追加；保留未锁部分应对回调。','价格保护'],
 ['提前锁量，分段确认价格','提前确认关键零部件订单的排产与交付量，可采用锁量不锁价或锁量加分批锁价，降低涨价期间供给与交付的不确定性；不额外扩大未确认需求。','交付保障'],
 ['缩短敞口，保留回调窗口','将长交期订单拆成多个定价窗口，优先处理调价传导快、替代难的零部件；供应恢复或铝锭库存转为累积时，放慢后续锁价，避免一次锁定全部远期高价。','节奏调整']
-]:delta!==null&&delta< -0.5?[
-['暂缓扩大固定价覆盖','价格回落阶段，对未定价的后续订单保留浮动空间，分批复核供应商降价传导；交付确定的订单仍按计划执行。','价格弹性'],
-['交付安排与定价分开','先确认关键零部件的排产和交期，再分段确定材料价格，减少因等待更低价格而影响交付的风险。','交付保障'],
-['观察企稳后再扩大锁价','当库存去化、加工订单与供应商报价同时企稳，再逐批扩大已确认订单的固定价覆盖。','节奏调整']
+]:delta!==null&&delta<0?[
+['复核前期涨价，推动降价落地','铝价回落时，优先复核前期已接受涨价的铝件报价；依据合同计价窗口、实际用铝量和同口径铝基准变化，推动未交付及后续订单下调材料价格，不把铝价跌幅直接等同零部件降价幅度。','降价传导'],
+['锁量保交付，保留价格下调空间','对确定订单先锁数量和交期，价格采用分批点价、随基准向下调整，或经双方约定的封顶且可下调条款；明确适用批次、触发条件和结算窗口，避免一次固定全部远期价格。','定价弹性'],
+['分批补库，保留后续议价窗口','按已确认排产分批补库，保障关键零部件交付；对未确认的远期需求保留定价弹性。若报价企稳、客户排产上调或交期拉长，再调整采购覆盖范围。','采购节奏']
 ]:[
 ['分批定价保留选择','短期缺少明确趋势，已确认订单分批议价，避免一次固定全部远期材料价格。','价格弹性'],
 ['先落实关键交付','提前安排替代难、交期长的零部件排产，价格通过后续计价窗口确认。','交付保障'],
@@ -144,7 +144,7 @@ document.querySelectorAll('header nav a')[3].addEventListener('click',()=>{if(do
 switchCategory(new URLSearchParams(location.search).get('category')||'aluminum',false);
 
 
-Promise.all(['./data/monthly-sources.json','./data/monthly-observations.json','./data/monthly-analysis.json','./data/aluminum-context.json'].map(async u=>{const r=await fetch(u);if(!r.ok)throw Error('数据文件读取失败');return r.json();})).then(([l,h,a,c])=>{ledger=l;analysisData=a;contextData=c;rows=h.observations.filter(r=>['inherited_cache','verified'].includes(r.status)&&Number.isFinite(r.value)).map(r=>({month:r.month,price:r.value,source:r.sourceUrl,date:r.observedAt,period:r.month+'-21/'+r.observedAt})).sort((a,b)=>a.month.localeCompare(b.month));$('month').value=analysisData.defaultMonth||rows.at(-1)?.month||'2026-10';render();sources();}).catch(e=>{$('error').textContent=e.message+'；未生成市场建议。';});
+Promise.all(['./data/monthly-sources.json','./data/monthly-observations.json','./data/monthly-analysis.json','./data/aluminum-context.json'].map(async u=>{const r=await fetch(u,{cache:'no-store'});if(!r.ok)throw Error('数据文件读取失败');return r.json();})).then(([l,h,a,c])=>{ledger=l;analysisData=a;contextData=c;rows=h.observations.filter(r=>['inherited_cache','verified'].includes(r.status)&&Number.isFinite(r.value)).map(r=>({month:r.month,price:r.value,source:r.sourceUrl,date:r.observedAt,period:r.month+'-21/'+r.observedAt})).sort((a,b)=>a.month.localeCompare(b.month));$('month').value=analysisData.defaultMonth||rows.at(-1)?.month||'2026-10';render();sources();}).catch(e=>{$('error').textContent=e.message+'；未生成市场建议。';});
 })();
 
 
