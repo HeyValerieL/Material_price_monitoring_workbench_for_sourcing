@@ -38,6 +38,15 @@ def analysis(**changes):
 
 
 class ValidationTests(unittest.TestCase):
+    def test_old_article_forecast_is_not_current_month_actual_output(self):
+        url='https://news.smm.cn/news/example'
+        item=observation(value=108.47,url=url,publishedAt='2026-09-30',
+            quote='SMM预计2026年10月电解铜产量108.47万吨',periodEvidence='SMM预计2026年10月电解铜产量')
+        page='2026-09-30。'+item['quote']
+        result=m.validate_research('copper','2026-10',{'observations':[item]},{url},fetch=lambda _:page)
+        self.assertFalse(result['facts'])
+        self.assertIn('预测',result['rejected'][0]['reason'])
+
     def test_verified_trade_tonnes_are_converted_by_program(self):
         item = observation(id='refinedImport',value=311551.74,unit='吨/月',yoy=None,yoyQuote='',
             quote='2026年10月精炼铜进口311551.74吨',periodEvidence='2026年10月精炼铜进口',definition='海关精炼铜分项')

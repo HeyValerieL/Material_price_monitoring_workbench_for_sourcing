@@ -380,6 +380,7 @@ RESEARCH_INSTRUCTIONS = '''你是中国铝铜钢材月度数据采集员。只�
 不能把付费库标题、搜索摘要、单日价格当作已取得的月度数字；必须打开原文并引用完整原文。
 每个指标最多一条。优先按清单单位提取；贸易原文仅给吨时保留原数值并将unit填“吨/月”，由程序核验后换算万吨/月。
 不得自行换算数值或累计差分；找不到就缺失。铜产量固定SMM统计口径，转载必须明确注明SMM，不能改用另一套机构统计。
+产量只能取已经完成统计期的实际值，不能取预计、预估、计划或预测值；不要把旧月文章中对下个月的预测当成新月实际产量。
 缺失指标只放missing，不要以value:null的对象放进observations；字符串字段不能填null。
 period: monthly/index/monthly_average为YYYY-MM；month_end/month_end_proxy为当月最后一天YYYY-MM-DD；
 ytd为YYYY-01/YYYY-MM；annual为上一年YYYY。periodEvidence逐字引用原文中说明统计期的文字。
@@ -492,6 +493,11 @@ def validate_research(category, month, research, cited_urls, fetch=fetch_page):
             if not isinstance(item['value'], (float, int)) or isinstance(item['value'], bool) or not math.isfinite(item['value']):
                 raise ValueError('数值无效')
             text = page(item)
+            if item['id'] in ('output','outputYtd','outputPriorYear'):
+                if re.search(r'预计|预估|预测产量|预测值|产量预测|计划产量|目标产量', item['definition'] + item['quote']):
+                    raise ValueError('产量预测值不能作为已完成统计期的实际产量')
+                if item['basis'] in ('monthly','ytd') and item['publishedAt'] < expected_period(month,'month_end'):
+                    raise ValueError('完整月份产量的发布日期早于统计月结束，不能确认实际值')
             if not number_in(item['value'], item['quote']):
                 raise ValueError('数值未出现在引用原文')
             if conversion and not re.search(r'(?<!万)吨', item['quote']):
@@ -642,7 +648,7 @@ def run(month, root=ROOT, only_category=None):
     for category, config in selected.items():
         checked = {}
         try:
-            fixed_plan = source_plan(category, month)
+            fixed_plan = source_plan(category, month, approved_reports=public['reports'])
             dump(root / f'automation/output/source-plan-{category}.json', fixed_plan)
             research, citations = client.request(RESEARCH_INSTRUCTIONS, {
                 'category': config['name'], 'categoryKey':category, 'month': month,

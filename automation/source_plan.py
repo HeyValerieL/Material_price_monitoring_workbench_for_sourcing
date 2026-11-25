@@ -6,7 +6,7 @@ from discovery import routes
 CATALOG = Path(__file__).with_name('source-catalog.json')
 
 
-def plan(category, month, catalog=None):
+def plan(category, month, catalog=None, approved_reports=None):
     catalog = catalog or json.loads(CATALOG.read_text(encoding='utf-8'))
     group = catalog['categories'][category]
     selected = {}
@@ -25,6 +25,30 @@ def plan(category, month, catalog=None):
         for source in chosen:
             entry = selected.setdefault(source['url'], dict(source, targetMetricIds=[]))
             entry['targetMetricIds'].append(mid)
+    # Only reports already on main are approved discovery references. Transfer
+    # links and definitions, never their historical values into new extraction.
+    learned = set()
+    for report_month, report in sorted((approved_reports or {}).items(), reverse=True):
+        if report_month > month:
+            continue
+        for fact in report.get('categories',{}).get(category,{}).get('facts',[]):
+            mid = fact.get('id')
+            if mid not in profiles or mid in learned or not fact.get('url','').startswith('https://'):
+                continue
+            learned.add(mid)
+            if fact.get('unit') != profiles[mid]['unit'] or fact.get('basis') != profiles[mid]['basis']:
+                continue
+            url = fact['url']
+            existing_dates = [s.get('publishedAt') or '' for s in selected.values() if mid in s['targetMetricIds']]
+            if (fact.get('publishedAt') or '') <= max(existing_dates or ['']):
+                continue
+            if url not in profiles[mid]['sourceUrls']:
+                profiles[mid]['sourceUrls'].insert(0,url)
+            entry = selected.setdefault(url, {'url':url,'title':fact.get('title','已审核来源'),
+                'publishedAt':fact.get('publishedAt'),'recordedMonths':[report_month],
+                'method':fact.get('basis'),'reviewStatus':'approved_report_on_main','targetMetricIds':[]})
+            if mid not in entry['targetMetricIds']:
+                entry['targetMetricIds'].append(mid)
     seeds = sorted(selected.values(), key=lambda s: (
         month in s['recordedMonths'], len(s['targetMetricIds']),
         s.get('publishedAt') or '', max(s['recordedMonths'] or [''])), reverse=True)
